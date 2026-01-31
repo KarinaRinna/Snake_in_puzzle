@@ -2,6 +2,7 @@ import pygame
 import random
 import os
 import time
+import json
 
 # Инициализация Pygame
 pygame.init()
@@ -18,6 +19,12 @@ BLUE = (0, 0, 255)
 GOLD = (255, 215, 0)
 GRAY = (100, 100, 100)
 SILVER = (192, 192, 192)
+DARK_GRAY = (50, 50, 50)
+LIGHT_BLUE = (173, 216, 230)
+MENU_BG = (30, 30, 60)
+BUTTON_COLOR = (70, 70, 120)
+BUTTON_HOVER = (90, 90, 150)
+BUTTON_CLICK = (110, 110, 180)
 
 # Настройки экрана
 WIDTH, HEIGHT = 600, 400
@@ -36,11 +43,12 @@ pygame.mixer.init()
 LEVELS = [
     {
         "name": "Лес",
-        "puzzles_needed": 6,  # Пазлов для открытия
+        "puzzles_needed": 6,
         "background_file": "level1_forest.jpg",
-        "unlocked": True,  # Первый уровень открыт сразу
+        "unlocked": True,
         "completed": False,
-        "color": (34, 139, 34)  # Зеленый для леса
+        "color": (34, 139, 34),
+        "preview_file": "level1_forest.jpg"  # Используем тот же файл
     },
     {
         "name": "Горы",
@@ -48,7 +56,8 @@ LEVELS = [
         "background_file": "level2_mountains.jpg", 
         "unlocked": False,
         "completed": False,
-        "color": (139, 137, 137)  # Серый для гор
+        "color": (139, 137, 137),
+        "preview_file": "level2_mountains.jpg"  # Используем тот же файл
     },
     {
         "name": "Океан",
@@ -56,7 +65,8 @@ LEVELS = [
         "background_file": "level3_ocean.jpg",
         "unlocked": False,
         "completed": False,
-        "color": (30, 144, 255)  # Синий для океана
+        "color": (30, 144, 255),
+        "preview_file": "level3_ocean.jpg"  # Используем тот же файл
     },
     {
         "name": "Пустыня",
@@ -64,7 +74,8 @@ LEVELS = [
         "background_file": "level4_desert.jpg",
         "unlocked": False,
         "completed": False,
-        "color": (238, 203, 173)  # Песочный для пустыни
+        "color": (238, 203, 173),
+        "preview_file": "level4_desert.jpg"  # Используем тот же файл
     },
     {
         "name": "Космос",
@@ -72,46 +83,81 @@ LEVELS = [
         "background_file": "level5_space.jpg",
         "unlocked": False,
         "completed": False,
-        "color": (25, 25, 112)  # Темно-синий для космоса
+        "color": (25, 25, 112),
+        "preview_file": "level5_space.jpg"  # Используем тот же файл
     }
 ]
 
 # Глобальные переменные для сохранения прогресса
-TOTAL_PUZZLES_COLLECTED = 0  # Общее количество собранных пазлов
+
+
+# Доступные цвета для змейки
+SNAKE_COLORS = [
+    {"name": "Зеленый", "color": (0, 200, 0)},
+    {"name": "Синий", "color": (0, 100, 255)},
+    {"name": "Красный", "color": (255, 50, 50)},
+    {"name": "Фиолетовый", "color": (180, 0, 180)},
+    {"name": "Оранжевый", "color": (255, 150, 0)},
+    {"name": "Золотой", "color": (255, 215, 0)}
+]
 
 def save_progress():
     """Сохранение прогресса в файл"""
+    global TOTAL_PUZZLES_COLLECTED, SNAKE_SPEED, SNAKE_COLOR, MUSIC_VOLUME, SOUND_VOLUME
     try:
-        with open("game_progress.txt", "w") as f:
-            f.write(f"total_puzzles={TOTAL_PUZZLES_COLLECTED}\n")
-            for i, level in enumerate(LEVELS):
-                f.write(f"level_{i}_unlocked={1 if level['unlocked'] else 0}\n")
-                f.write(f"level_{i}_completed={1 if level['completed'] else 0}\n")
+        # Находим индекс текущего цвета змейки
+        color_index = 0
+        for i, color_data in enumerate(SNAKE_COLORS):
+            if color_data["color"] == SNAKE_COLOR:
+                color_index = i
+                break
+        
+        progress_data = {
+            "total_puzzles": TOTAL_PUZZLES_COLLECTED,
+            "snake_speed": SNAKE_SPEED,
+            "snake_color_index": color_index,
+            "music_volume": MUSIC_VOLUME,
+            "sound_volume": SOUND_VOLUME,
+            "levels": []
+        }
+        
+        for i, level in enumerate(LEVELS):
+            progress_data["levels"].append({
+                "unlocked": level["unlocked"],
+                "completed": level["completed"]
+            })
+        
+        with open("game_progress.json", "w") as f:
+            json.dump(progress_data, f, indent=2)
+            
     except Exception as e:
         print(f"Ошибка сохранения прогресса: {e}")
 
 def load_progress():
     """Загрузка прогресса из файла"""
-    global TOTAL_PUZZLES_COLLECTED
+    global TOTAL_PUZZLES_COLLECTED, SNAKE_SPEED, SNAKE_COLOR, MUSIC_VOLUME, SOUND_VOLUME
     
     try:
-        if os.path.exists("game_progress.txt"):
-            with open("game_progress.txt", "r") as f:
-                lines = f.readlines()
-                for line in lines:
-                    line = line.strip()
-                    if "=" in line:
-                        key, value = line.split("=")
-                        if key == "total_puzzles":
-                            TOTAL_PUZZLES_COLLECTED = int(value)
-                        elif key.startswith("level_") and key.endswith("_unlocked"):
-                            level_index = int(key.split("_")[1])
-                            if level_index < len(LEVELS):
-                                LEVELS[level_index]["unlocked"] = bool(int(value))
-                        elif key.startswith("level_") and key.endswith("_completed"):
-                            level_index = int(key.split("_")[1])
-                            if level_index < len(LEVELS):
-                                LEVELS[level_index]["completed"] = bool(int(value))
+        if os.path.exists("game_progress.json"):
+            with open("game_progress.json", "r") as f:
+                progress_data = json.load(f)
+                
+            TOTAL_PUZZLES_COLLECTED = progress_data.get("total_puzzles", 0)
+            SNAKE_SPEED = progress_data.get("snake_speed", 10)
+            
+            color_index = progress_data.get("snake_color_index", 0)
+            if color_index < len(SNAKE_COLORS):
+                SNAKE_COLOR = SNAKE_COLORS[color_index]["color"]
+            
+            MUSIC_VOLUME = progress_data.get("music_volume", 0.5)
+            SOUND_VOLUME = progress_data.get("sound_volume", 1.0)
+            
+            levels_data = progress_data.get("levels", [])
+            for i, level_data in enumerate(levels_data):
+                if i < len(LEVELS):
+                    LEVELS[i]["unlocked"] = level_data.get("unlocked", False)
+                    LEVELS[i]["completed"] = level_data.get("completed", False)
+            
             print(f"Прогресс загружен: {TOTAL_PUZZLES_COLLECTED} пазлов")
             return True
     except Exception as e:
@@ -119,20 +165,611 @@ def load_progress():
     
     return False
 
+def reset_progress():
+    """Сброс прогресса игры"""
+    global TOTAL_PUZZLES_COLLECTED, SNAKE_SPEED, SNAKE_COLOR, MUSIC_VOLUME, SOUND_VOLUME
+    
+    TOTAL_PUZZLES_COLLECTED = 0
+    SNAKE_SPEED = 10
+    SNAKE_COLOR = SNAKE_COLORS[0]["color"]
+    MUSIC_VOLUME = 0.5
+    SOUND_VOLUME = 1.0
+    
+    for level in LEVELS:
+        level["unlocked"] = (level["name"] == "Лес")
+        level["completed"] = False
+    
+    save_progress()
+    print("Прогресс сброшен!")
+
+class Button:
+    def __init__(self, x, y, width, height, text, action=None):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.text = text
+        self.action = action
+        self.hovered = False
+        self.clicked = False
+        
+    def draw(self, surface):
+        # Определяем цвет кнопки
+        if self.clicked:
+            color = BUTTON_CLICK
+        elif self.hovered:
+            color = BUTTON_HOVER
+        else:
+            color = BUTTON_COLOR
+        
+        # Рисуем кнопку
+        pygame.draw.rect(surface, color, self.rect, border_radius=10)
+        pygame.draw.rect(surface, WHITE, self.rect, 2, border_radius=10)
+        
+        # Рисуем текст
+        font = pygame.font.SysFont('arial', 24)
+        text_surface = font.render(self.text, True, WHITE)
+        text_rect = text_surface.get_rect(center=self.rect.center)
+        surface.blit(text_surface, text_rect)
+        
+    def check_hover(self, pos):
+        self.hovered = self.rect.collidepoint(pos)
+        return self.hovered
+        
+    def check_click(self, pos):
+        if self.rect.collidepoint(pos):
+            self.clicked = True
+            return True
+        return False
+        
+    def reset_click(self):
+        self.clicked = False
+
+class Slider:
+    def __init__(self, x, y, width, height, min_val, max_val, current_val, label):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.min_val = min_val
+        self.max_val = max_val
+        self.current_val = current_val
+        self.label = label
+        self.dragging = False
+        
+        # Вычисляем положение ползунка
+        self.slider_width = 20
+        self.slider_pos = x + (current_val - min_val) / (max_val - min_val) * width
+        
+    def draw(self, surface):
+        # Рисуем фон слайдера
+        pygame.draw.rect(surface, DARK_GRAY, self.rect, border_radius=5)
+        
+        # Рисуем заполненную часть
+        fill_width = (self.current_val - self.min_val) / (self.max_val - self.min_val) * self.rect.width
+        fill_rect = pygame.Rect(self.rect.x, self.rect.y, fill_width, self.rect.height)
+        pygame.draw.rect(surface, BLUE, fill_rect, border_radius=5)
+        
+        # Рисуем ползунок
+        slider_rect = pygame.Rect(self.slider_pos - self.slider_width//2, 
+                                 self.rect.y - 5, 
+                                 self.slider_width, 
+                                 self.rect.height + 10)
+        pygame.draw.rect(surface, WHITE, slider_rect, border_radius=5)
+        pygame.draw.rect(surface, BLACK, slider_rect, 2, border_radius=5)
+        
+        # Рисуем текст
+        font = pygame.font.SysFont('arial', 18)
+        label_text = font.render(f"{self.label}: {self.current_val}", True, WHITE)
+        surface.blit(label_text, (self.rect.x, self.rect.y - 25))
+        
+    def update(self, pos, dragging):
+        if dragging and self.rect.collidepoint(pos):
+            self.dragging = True
+            
+        if self.dragging:
+            # Обновляем позицию ползунка
+            self.slider_pos = max(self.rect.x, min(pos[0], self.rect.x + self.rect.width))
+            
+            # Вычисляем значение
+            self.current_val = self.min_val + (self.slider_pos - self.rect.x) / self.rect.width * (self.max_val - self.min_val)
+            self.current_val = round(self.current_val)
+            
+        return self.dragging
+        
+    def stop_dragging(self):
+        self.dragging = False
+
+def show_main_menu():
+    """Показ главного меню"""
+    buttons = [
+        Button(WIDTH//2 - 100, HEIGHT//2 - 80, 200, 50, "Играть", "play"),
+        Button(WIDTH//2 - 100, HEIGHT//2 - 20, 200, 50, "Настройки", "settings"),
+        Button(WIDTH//2 - 100, HEIGHT//2 + 40, 200, 50, "Галерея", "gallery"),
+        Button(WIDTH//2 - 100, HEIGHT//2 + 100, 200, 50, "Выйти", "quit")
+    ]
+    
+    # Загружаем и устанавливаем фоновую музыку
+    if os.path.exists("background_music.mp3"):
+        try:
+            pygame.mixer.music.load("background_music.mp3")
+            pygame.mixer.music.play(-1)
+            pygame.mixer.music.set_volume(MUSIC_VOLUME)
+        except:
+            print("Не удалось загрузить фоновую музыку")
+    
+    while True:
+        mouse_pos = pygame.mouse.get_pos()
+        
+        # Обработка событий
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+                
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Левая кнопка мыши
+                    for button in buttons:
+                        if button.check_click(mouse_pos):
+                            if button.action == "quit":
+                                return "quit"
+                            else:
+                                return button.action
+                                
+            if event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1:
+                    for button in buttons:
+                        button.reset_click()
+        
+        # Отрисовка
+        screen.fill(MENU_BG)
+        
+        # Заголовок игры
+        title_font = pygame.font.SysFont('arial', 60)
+        title_text = title_font.render("ЗМЕЙКА", True, GOLD)
+        subtitle_font = pygame.font.SysFont('arial', 30)
+        subtitle_text = subtitle_font.render("Собери мир!", True, YELLOW)
+        
+        screen.blit(title_text, (WIDTH//2 - title_text.get_width()//2, 50))
+        screen.blit(subtitle_text, (WIDTH//2 - subtitle_text.get_width()//2, 120))
+        
+        # Статистика
+        stats_font = pygame.font.SysFont('arial', 20)
+        stats_text = stats_font.render(f"Собрано пазлов: {TOTAL_PUZZLES_COLLECTED}", True, WHITE)
+        screen.blit(stats_text, (WIDTH//2 - stats_text.get_width()//2, HEIGHT - 150))
+        
+        # Кнопки
+        for button in buttons:
+            button.check_hover(mouse_pos)
+            button.draw(screen)
+        
+        pygame.display.update()
+
+def show_settings(): 
+    """Показ меню настроек"""
+    # Создаем слайдеры
+    speed_slider = Slider(WIDTH//2 - 150, 100, 300, 20, 5, 20, SNAKE_SPEED, "Скорость змейки")
+    music_slider = Slider(WIDTH//2 - 150, 160, 300, 20, 0, 100, int(MUSIC_VOLUME * 100), "Громкость музыки")
+    sound_slider = Slider(WIDTH//2 - 150, 220, 300, 20, 0, 100, int(SOUND_VOLUME * 100), "Громкость звуков")
+    
+    # Кнопки
+    buttons = [
+        Button(WIDTH//2 - 100, 280, 200, 40, "Сменить цвет змейки", "change_color"),
+        Button(WIDTH//2 - 100, 330, 200, 40, "Сбросить прогресс", "reset_progress"),
+        Button(WIDTH//2 - 100, HEIGHT - 60, 200, 40, "Назад", "back")
+    ]
+    
+    # Текущий цвет змейки
+    current_color_rect = pygame.Rect(WIDTH//2 + 120, 280, 40, 40)
+    
+    dragging_slider = None
+    
+    while True:
+        mouse_pos = pygame.mouse.get_pos()
+        
+        # Обработка событий
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+                
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    # Проверяем слайдеры
+                    for slider in [speed_slider, music_slider, sound_slider]:
+                        if slider.update(mouse_pos, True):
+                            dragging_slider = slider
+                    
+                    # Проверяем кнопки
+                    for button in buttons:
+                        if button.check_click(mouse_pos):
+                            if button.action == "back":
+                                # Сохраняем настройки перед выходом
+                                SNAKE_SPEED, MUSIC_VOLUME, SOUND_VOLUME
+                                SNAKE_SPEED = speed_slider.current_val
+                                MUSIC_VOLUME = music_slider.current_val / 100
+                                SOUND_VOLUME = sound_slider.current_val / 100
+                                pygame.mixer.music.set_volume(MUSIC_VOLUME)
+                                save_progress()
+                                return "menu"
+                            elif button.action == "change_color":
+                                # Смена цвета змейки
+                                global SNAKE_COLOR
+                                current_index = next((i for i, c in enumerate(SNAKE_COLORS) if c["color"] == SNAKE_COLOR), 0)
+                                next_index = (current_index + 1) % len(SNAKE_COLORS)
+                                SNAKE_COLOR = SNAKE_COLORS[next_index]["color"]
+                                save_progress()
+                            elif button.action == "reset_progress":
+                                # Подтверждение сброса прогресса
+                                if show_confirmation_dialog("Вы уверены, что хотите сбросить весь прогресс?"):
+                                    reset_progress()
+                                    # Обновляем значения слайдеров
+                                    speed_slider.current_val = SNAKE_SPEED
+                                    music_slider.current_val = int(MUSIC_VOLUME * 100)
+                                    sound_slider.current_val = int(SOUND_VOLUME * 100)
+                
+            if event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1:
+                    if dragging_slider:
+                        dragging_slider.stop_dragging()
+                        dragging_slider = None
+                    
+                    for button in buttons:
+                        button.reset_click()
+                        
+            if event.type == pygame.MOUSEMOTION:
+                if dragging_slider:
+                    dragging_slider.update(mouse_pos, True)
+        
+        # Отрисовка
+        screen.fill(MENU_BG)
+        
+        # Заголовок
+        title_font = pygame.font.SysFont('arial', 50)
+        title_text = title_font.render("НАСТРОЙКИ", True, GOLD)
+        screen.blit(title_text, (WIDTH//2 - title_text.get_width()//2, 20))
+        
+        # Слайдеры
+        speed_slider.draw(screen)
+        music_slider.draw(screen)
+        sound_slider.draw(screen)
+        
+        # Текущий цвет змейки
+        color_font = pygame.font.SysFont('arial', 18)
+        color_text = color_font.render("Цвет змейки:", True, WHITE)
+        screen.blit(color_text, (WIDTH//2 - 150, 290))
+        
+        current_color_name = next((c["name"] for c in SNAKE_COLORS if c["color"] == SNAKE_COLOR), "Зеленый")
+        color_name_text = color_font.render(current_color_name, True, SNAKE_COLOR)
+        screen.blit(color_name_text, (WIDTH//2 - 50, 290))
+        
+        pygame.draw.rect(screen, SNAKE_COLOR, current_color_rect)
+        pygame.draw.rect(screen, WHITE, current_color_rect, 2)
+        
+        # Кнопки
+        for button in buttons:
+            button.check_hover(mouse_pos)
+            button.draw(screen)
+        
+        pygame.display.update()
+
+def show_confirmation_dialog(message):
+    """Показ диалога подтверждения"""
+    dialog_width = 400
+    dialog_height = 150
+    dialog_x = WIDTH//2 - dialog_width//2
+    dialog_y = HEIGHT//2 - dialog_height//2
+    
+    buttons = [
+        Button(dialog_x + 50, dialog_y + 90, 120, 40, "Да", True),
+        Button(dialog_x + 230, dialog_y + 90, 120, 40, "Нет", False)
+    ]
+    
+    while True:
+        mouse_pos = pygame.mouse.get_pos()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+                
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    for button in buttons:
+                        if button.check_click(mouse_pos):
+                            return button.action
+                            
+            if event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1:
+                    for button in buttons:
+                        button.reset_click()
+        
+        # Отрисовка диалога
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        screen.blit(overlay, (0, 0))
+        
+        dialog_bg = pygame.Rect(dialog_x, dialog_y, dialog_width, dialog_height)
+        pygame.draw.rect(screen, MENU_BG, dialog_bg, border_radius=10)
+        pygame.draw.rect(screen, WHITE, dialog_bg, 2, border_radius=10)
+        
+        # Текст сообщения
+        font = pygame.font.SysFont('arial', 22)
+        lines = message.split('\n')
+        y_offset = dialog_y + 30
+        for line in lines:
+            text = font.render(line, True, WHITE)
+            screen.blit(text, (WIDTH//2 - text.get_width()//2, y_offset))
+            y_offset += 30
+        
+        # Кнопки
+        for button in buttons:
+            button.check_hover(mouse_pos)
+            button.draw(screen)
+        
+        pygame.display.update()
+
+def show_gallery():
+    """Показ галереи собранных изображений"""
+    current_page = 0
+    items_per_page = 6
+    
+    # Кнопки
+    buttons = [
+        Button(50, HEIGHT - 60, 120, 40, "Назад", "back"),
+        Button(WIDTH - 170, HEIGHT - 60, 120, 40, "Далее", "next")
+    ]
+    
+    while True:
+        mouse_pos = pygame.mouse.get_pos()
+        
+        # Обработка событий
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+                
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    for button in buttons:
+                        if button.check_click(mouse_pos):
+                            if button.action == "back":
+                                if current_page > 0:
+                                    current_page -= 1
+                            elif button.action == "next":
+                                if (current_page + 1) * items_per_page < len(LEVELS):
+                                    current_page += 1
+                
+            if event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1:
+                    for button in buttons:
+                        button.reset_click()
+        
+        # Отрисовка
+        screen.fill(MENU_BG)
+        
+        # Заголовок
+        title_font = pygame.font.SysFont('arial', 50)
+        title_text = title_font.render("ГАЛЕРЕЯ", True, GOLD)
+        screen.blit(title_text, (WIDTH//2 - title_text.get_width()//2, 20))
+        
+        # Статистика
+        stats_font = pygame.font.SysFont('arial', 20)
+        unlocked_count = sum(1 for level in LEVELS if level["completed"])
+        stats_text = stats_font.render(f"Открыто: {unlocked_count}/{len(LEVELS)}", True, WHITE)
+        screen.blit(stats_text, (WIDTH//2 - stats_text.get_width()//2, 80))
+        
+        # Отображение изображений
+        start_idx = current_page * items_per_page
+        end_idx = min(start_idx + items_per_page, len(LEVELS))
+        
+        for i, level_index in enumerate(range(start_idx, end_idx)):
+            level = LEVELS[level_index]
+            
+            # Вычисляем позицию для изображения (2x3 сетка)
+            row = i // 3
+            col = i % 3
+            
+            img_width = 150
+            img_height = 100
+            margin_x = 50
+            margin_y = 120
+            spacing_x = (WIDTH - 2 * margin_x - 3 * img_width) // 2
+            spacing_y = 20
+            
+            x = margin_x + col * (img_width + spacing_x)
+            y = margin_y + row * (img_height + spacing_y)
+            
+            # Загружаем превью
+            preview = None
+            if os.path.exists(level["preview_file"]):
+                try:
+                    preview = pygame.image.load(level["preview_file"])
+                    preview = pygame.transform.scale(preview, (img_width, img_height))
+                except:
+                    preview = None
+            
+            # Если превью не загружено, создаем цветной прямоугольник
+            if preview is None:
+                preview = pygame.Surface((img_width, img_height))
+                preview.fill(level["color"])
+                
+                # Добавляем текст с названием уровня
+                font = pygame.font.SysFont('arial', 16)
+                text = font.render(level["name"], True, WHITE)
+                text_rect = text.get_rect(center=(img_width//2, img_height//2))
+                preview.blit(text, text_rect)
+            
+            # Если уровень не открыт, затемняем изображение
+            if not level["completed"]:
+                # Создаем затемненную копию
+                darkened = pygame.Surface((img_width, img_height))
+                darkened.fill((0, 0, 0))
+                darkened.set_alpha(180)  # Полупрозрачный черный
+                preview.blit(darkened, (0, 0))
+                
+                # Добавляем значок замка
+                lock_font = pygame.font.SysFont('arial', 40)
+                lock_text = lock_font.render("🔒", True, WHITE)
+                lock_rect = lock_text.get_rect(center=(img_width//2, img_height//2))
+                preview.blit(lock_text, lock_rect)
+            
+            # Отображаем изображение
+            screen.blit(preview, (x, y))
+            
+            # Добавляем рамку
+            border_color = GOLD if level["completed"] else GRAY
+            pygame.draw.rect(screen, border_color, (x-2, y-2, img_width+4, img_height+4), 2)
+            
+            # Добавляем номер уровня
+            level_font = pygame.font.SysFont('arial', 14)
+            level_text = level_font.render(f"Уровень {level_index + 1}", True, WHITE)
+            screen.blit(level_text, (x + 5, y + 5))
+        
+        # Кнопки навигации
+        for button in buttons:
+            button.check_hover(mouse_pos)
+            button.draw(screen)
+        
+        # Индикатор страницы
+        page_font = pygame.font.SysFont('arial', 18)
+        page_text = page_font.render(f"Страница {current_page + 1}/{((len(LEVELS) - 1) // items_per_page) + 1}", True, WHITE)
+        screen.blit(page_text, (WIDTH//2 - page_text.get_width()//2, HEIGHT - 100))
+        
+        # Кнопка возврата в меню
+        back_button = Button(WIDTH//2 - 100, HEIGHT - 150, 200, 40, "В главное меню", "menu")
+        back_button.check_hover(mouse_pos)
+        back_button.draw(screen)
+        
+        # Проверка клика на кнопку возврата
+        if pygame.mouse.get_pressed()[0]:
+            if back_button.rect.collidepoint(mouse_pos):
+                return "menu"
+        
+        pygame.display.update()
+
+def show_level_selection():
+    """Показ экрана выбора уровня"""
+    selected_level = 0
+    
+    while True:
+        mouse_pos = pygame.mouse.get_pos()
+        
+        # Обработка событий
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+                
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return "menu"
+                    
+                if event.key == pygame.K_UP and selected_level >= 3:
+                    selected_level -= 3
+                elif event.key == pygame.K_DOWN and selected_level + 3 < len(LEVELS):
+                    selected_level += 3
+                elif event.key == pygame.K_LEFT and selected_level > 0:
+                    selected_level -= 1
+                elif event.key == pygame.K_RIGHT and selected_level < len(LEVELS) - 1:
+                    selected_level += 1
+                elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                    if LEVELS[selected_level]["unlocked"]:
+                        return selected_level
+                        
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    # Проверяем клик по уровню
+                    for i, level in enumerate(LEVELS):
+                        x = WIDTH//2 - 200 + (i % 3) * 140
+                        y = 150 + (i // 3) * 120
+                        
+                        level_rect = pygame.Rect(x, y, 120, 100)
+                        if level_rect.collidepoint(mouse_pos) and level["unlocked"]:
+                            return i
+                    
+                    # Проверяем кнопку возврата
+                    back_button = pygame.Rect(20, 20, 100, 40)
+                    if back_button.collidepoint(mouse_pos):
+                        return "menu"
+        
+        # Отрисовка
+        screen.fill((20, 20, 40))
+        
+        # Заголовок
+        title_font = pygame.font.SysFont('arial', 60)
+        title_text = title_font.render('ВЫБЕРИ УРОВЕНЬ', True, GOLD)
+        screen.blit(title_text, (WIDTH//2 - title_text.get_width()//2, 30))
+        
+        # Статистика
+        stats_font = pygame.font.SysFont('arial', 20)
+        total_puzzles_text = stats_font.render(f'Всего собрано пазлов: {TOTAL_PUZZLES_COLLECTED}', True, WHITE)
+        screen.blit(total_puzzles_text, (WIDTH//2 - total_puzzles_text.get_width()//2, 100))
+        
+        # Отображение уровней
+        for i, level in enumerate(LEVELS):
+            x = WIDTH//2 - 200 + (i % 3) * 140
+            y = 150 + (i // 3) * 120
+            
+            # Фон для уровня
+            level_bg = pygame.Surface((120, 100), pygame.SRCALPHA)
+            
+            if level["unlocked"]:
+                if i == selected_level:
+                    level_bg.fill((*level["color"], 200))
+                    border_color = GOLD
+                else:
+                    level_bg.fill((*level["color"], 150))
+                    border_color = WHITE
+                
+                # Иконка для открытого уровня
+                lock_text = "✓" if level["completed"] else str(i + 1)
+                lock_color = GOLD if level["completed"] else WHITE
+            else:
+                level_bg.fill((50, 50, 50, 200))
+                border_color = GRAY
+                lock_text = "🔒"
+                lock_color = GRAY
+            
+            pygame.draw.rect(level_bg, border_color, level_bg.get_rect(), 3)
+            screen.blit(level_bg, (x, y))
+            
+            # Название уровня
+            name_font = pygame.font.SysFont('arial', 18)
+            name_text = name_font.render(level["name"], True, WHITE if level["unlocked"] else GRAY)
+            screen.blit(name_text, (x + 60 - name_text.get_width()//2, y + 70))
+            
+            # Номер/значок уровня
+            lock_font = pygame.font.SysFont('arial', 40)
+            lock_render = lock_font.render(lock_text, True, lock_color)
+            screen.blit(lock_render, (x + 60 - lock_render.get_width()//2, y + 20))
+            
+            # Требования для закрытых уровней
+            if not level["unlocked"]:
+                req_font = pygame.font.SysFont('arial', 14)
+                req_text = req_font.render(f"Нужно {level['puzzles_needed']} пазлов", True, YELLOW)
+                screen.blit(req_text, (x + 60 - req_text.get_width()//2, y + 85))
+        
+        # Кнопка возврата
+        back_button = pygame.Rect(20, 20, 100, 40)
+        pygame.draw.rect(screen, BUTTON_COLOR, back_button, border_radius=5)
+        pygame.draw.rect(screen, WHITE, back_button, 2, border_radius=5)
+        
+        back_font = pygame.font.SysFont('arial', 18)
+        back_text = back_font.render("Назад", True, WHITE)
+        screen.blit(back_text, (back_button.x + 20, back_button.y + 10))
+        
+        # Инструкции
+        instructions_font = pygame.font.SysFont('arial', 16)
+        instructions = [
+            "Используйте стрелки для выбора уровня",
+            "ENTER для старта, ESC для выхода в меню"
+        ]
+        
+        for j, instruction in enumerate(instructions):
+            instr_text = instructions_font.render(instruction, True, WHITE)
+            screen.blit(instr_text, (WIDTH//2 - instr_text.get_width()//2, HEIGHT - 60 + j * 25))
+        
+        pygame.display.update()
+
 def load_sounds():
     """Загрузка звуковых эффектов"""
     sounds = {}
     
     try:
-        # Фоновая музыка
-        if os.path.exists("background_music.mp3"):
-            pygame.mixer.music.load("background_music.mp3")
-        else:
-            print("Файл background_music.mp3 не найден")
-        
         # Звук поедания еды
         if os.path.exists("eat_sound.wav"):
             sounds["eat"] = pygame.mixer.Sound("eat_sound.wav")
+            sounds["eat"].set_volume(SOUND_VOLUME)
         else:
             print("Файл eat_sound.wav не найден")
             sounds["eat"] = None
@@ -140,6 +777,7 @@ def load_sounds():
         # Звук game over
         if os.path.exists("game_over.wav"):
             sounds["game_over"] = pygame.mixer.Sound("game_over.wav")
+            sounds["game_over"].set_volume(SOUND_VOLUME)
         else:
             print("Файл game_over.wav не найден")
             sounds["game_over"] = None
@@ -147,7 +785,7 @@ def load_sounds():
         # Звук открытия пазла
         if os.path.exists("puzzle_open.wav"):
             sounds["puzzle_open"] = pygame.mixer.Sound("puzzle_open.wav")
-            sounds["puzzle_open"].set_volume(0.3)  # Громкость звука открытия пазла
+            sounds["puzzle_open"].set_volume(SOUND_VOLUME)
         else:
             print("Файл puzzle_open.wav не найден")
             sounds["puzzle_open"] = None
@@ -155,6 +793,7 @@ def load_sounds():
         # Звук победы
         if os.path.exists("win_sound.wav"):
             sounds["win"] = pygame.mixer.Sound("win_sound.wav")
+            sounds["win"].set_volume(SOUND_VOLUME)
         else:
             print("Файл win_sound.wav не найден")
             sounds["win"] = None
@@ -162,6 +801,7 @@ def load_sounds():
         # Звук открытия уровня
         if os.path.exists("level_unlock.wav"):
             sounds["level_unlock"] = pygame.mixer.Sound("level_unlock.wav")
+            sounds["level_unlock"].set_volume(SOUND_VOLUME)
         else:
             print("Файл level_unlock.wav не найден")
             sounds["level_unlock"] = None
@@ -372,14 +1012,6 @@ def draw_puzzle_overlay(surface, revealed_regions, background, puzzle_cover, ava
             text_bg.fill((0, 0, 0, 150))
             surface.blit(text_bg, (text_rect.x - 5, text_rect.y - 2))
             surface.blit(text, text_rect)
-
-def play_background_music():
-    """Воспроизведение фоновой музыки"""
-    try:
-        pygame.mixer.music.play(-1)
-        pygame.mixer.music.set_volume(0.5)
-    except pygame.error as e:
-        print(f"Ошибка воспроизведения музыки: {e}")
 
 def draw_grid(surface):
     """Отрисовка полупрозрачной сетки"""
@@ -681,9 +1313,11 @@ class Snake:
             rect = pygame.Rect(position[0] * GRID_SIZE, position[1] * GRID_SIZE, 
                              GRID_SIZE, GRID_SIZE)
             if i == 0:
-                pygame.draw.rect(surface, (0, 200, 0), rect)
+                pygame.draw.rect(surface, SNAKE_COLOR, rect)  # Используем выбранный цвет
             else:
-                color = (0, 180, 0) if i % 2 == 0 else (0, 160, 0)
+                # Создаем более темный оттенок для тела
+                darker_color = tuple(max(0, c - 40) for c in SNAKE_COLOR)
+                color = darker_color if i % 2 == 0 else tuple(max(0, c - 20) for c in SNAKE_COLOR)
                 pygame.draw.rect(surface, color, rect)
             pygame.draw.rect(surface, BLACK, rect, 1)
 
@@ -745,135 +1379,37 @@ class Food:
         
         pygame.draw.rect(surface, BLACK, rect, 1)
 
-def show_level_selection(surface, sounds):
-    """Экран выбора уровня"""
-    selected_level = 0
-    
-    while True:
-        surface.fill((20, 20, 40))
-        
-        font_large = pygame.font.SysFont('arial', 60)
-        font_medium = pygame.font.SysFont('arial', 30)
-        font_small = pygame.font.SysFont('arial', 24)
-        
-        title = font_large.render('ВЫБЕРИ УРОВЕНЬ', True, GOLD)
-        surface.blit(title, (WIDTH//2 - title.get_width()//2, 30))
-        
-        total_puzzles_text = font_medium.render(f'Всего собрано пазлов: {TOTAL_PUZZLES_COLLECTED}', True, WHITE)
-        surface.blit(total_puzzles_text, (WIDTH//2 - total_puzzles_text.get_width()//2, 100))
-        
-        instructions = font_small.render('Используйте стрелки для выбора, ENTER для старта', True, WHITE)
-        surface.blit(instructions, (WIDTH//2 - instructions.get_width()//2, HEIGHT - 40))
-        
-        # Отображаем уровни
-        for i, level in enumerate(LEVELS):
-            x = WIDTH//2 - 200 + (i % 3) * 140
-            y = 150 + (i // 3) * 120
-            
-            # Фон для уровня
-            level_bg = pygame.Surface((120, 100), pygame.SRCALPHA)
-            
-            if level["unlocked"]:
-                if i == selected_level:
-                    level_bg.fill((*level["color"], 200))  # Выбранный открытый
-                    border_color = GOLD
-                else:
-                    level_bg.fill((*level["color"], 150))  # Открытый
-                    border_color = WHITE
-                
-                # Иконка замка открыт
-                lock_text = "✓" if level["completed"] else str(i + 1)
-                lock_color = GOLD if level["completed"] else WHITE
-            else:
-                level_bg.fill((50, 50, 50, 200))  # Заблокированный
-                border_color = GRAY
-                lock_text = "🔒"
-                lock_color = GRAY
-            
-            pygame.draw.rect(level_bg, border_color, level_bg.get_rect(), 3)
-            surface.blit(level_bg, (x, y))
-            
-            # Название уровня
-            name_font = pygame.font.SysFont('arial', 18)
-            name_text = name_font.render(level["name"], True, WHITE if level["unlocked"] else GRAY)
-            surface.blit(name_text, (x + 60 - name_text.get_width()//2, y + 70))
-            
-            # Номер/замок
-            lock_font = pygame.font.SysFont('arial', 40)
-            lock_render = lock_font.render(lock_text, True, lock_color)
-            surface.blit(lock_render, (x + 60 - lock_render.get_width()//2, y + 20))
-            
-            # Требования для закрытых уровней
-            if not level["unlocked"]:
-                req_font = pygame.font.SysFont('arial', 14)
-                req_text = req_font.render(f"Нужно {level['puzzles_needed']} пазлов", True, YELLOW)
-                surface.blit(req_text, (x + 60 - req_text.get_width()//2, y + 85))
-        
-        pygame.display.update()
-        
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                return None
-                
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP and selected_level >= 3:
-                    selected_level -= 3
-                elif event.key == pygame.K_DOWN and selected_level + 3 < len(LEVELS):
-                    selected_level += 3
-                elif event.key == pygame.K_LEFT and selected_level > 0:
-                    selected_level -= 1
-                elif event.key == pygame.K_RIGHT and selected_level < len(LEVELS) - 1:
-                    selected_level += 1
-                elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
-                    if LEVELS[selected_level]["unlocked"]:
-                        return selected_level
-                elif event.key == pygame.K_ESCAPE:
-                    return None
-    
-    return 0
-
-def main():
-    global TOTAL_PUZZLES_COLLECTED
-    
-    clock = pygame.time.Clock()
-    
-    # Загружаем прогресс
-    load_progress()
-    
-    # Загружаем звуки и картинку для пазлов
+def play_game(level_index):
+    """Запуск игры на выбранном уровне"""
+    # Загружаем звуки
     sounds = load_sounds()
+    
+    # Загружаем картинку для пазлов
     puzzle_cover = load_puzzle_cover()
     
-    # Показываем меню выбора уровня
-    current_level_index = show_level_selection(screen, sounds)
-    if current_level_index is None:
-        pygame.quit()
-        return
-    
     # Загружаем фон для выбранного уровня
-    background = load_background_for_level(current_level_index)
+    background = load_background_for_level(level_index)
     
-    # Запускаем музыку
-    play_background_music()
-    
-    snake = Snake(sounds, current_level_index)
+    # Создаем змейку и еду
+    snake = Snake(sounds, level_index)
     food = Food()
+    
+    # Игровые переменные
     game_over = False
     game_won = False
     game_over_sound_played = False
     win_sound_played = False
-    FPS = 10
+    clock = pygame.time.Clock()
     
+    # Основной игровой цикл
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                return
+                return "quit"
                 
             if event.type == pygame.KEYDOWN:
                 if game_over or game_won:
-                    # Обработка на экране завершения уровня
+                    # Обработка на экране завершения
                     pass
                 else:
                     if event.key == pygame.K_UP:
@@ -885,36 +1421,25 @@ def main():
                     elif event.key == pygame.K_RIGHT:
                         snake.change_direction((1, 0))
                     elif event.key == pygame.K_SPACE:
+                        # Пауза музыки
                         if pygame.mixer.music.get_busy():
                             pygame.mixer.music.pause()
                         else:
                             pygame.mixer.music.unpause()
                     elif event.key == pygame.K_ESCAPE:
-                        # Возврат к выбору уровня
-                        current_level_index = show_level_selection(screen, sounds)
-                        if current_level_index is None:
-                            pygame.quit()
-                            return
-                        background = load_background_for_level(current_level_index)
-                        snake = Snake(sounds, current_level_index)
-                        food = Food()
-                        game_over = False
-                        game_won = False
-                        game_over_sound_played = False
-                        win_sound_played = False
-                        play_background_music()
+                        # Возврат в меню
+                        return "menu"
         
+        # Игровая логика
         if not game_over and not game_won:
             game_over = snake.move()
             game_won = snake.game_won
             
-            # Проверяем, открылся ли новый уровень
+            # Проверяем открытие новых уровней
             if snake.new_level_unlocked:
-                if show_level_unlocked(screen, snake.unlocked_level_index):
-                    snake.new_level_unlocked = False
-                else:
-                    pygame.quit()
-                    return
+                # Показываем уведомление об открытии уровня
+                show_level_unlocked(screen, snake.unlocked_level_index)
+                snake.new_level_unlocked = False
             
             if game_won and not win_sound_played:
                 pygame.mixer.music.stop()
@@ -922,6 +1447,7 @@ def main():
                     sounds["win"].play()
                 win_sound_played = True
             
+            # Проверяем съедание еды
             if not game_won and snake.get_head_position() == food.position:
                 snake.grow(food.points)
                 food = Food()
@@ -934,53 +1460,48 @@ def main():
             draw_grid(screen)
             snake.draw(screen)
             food.draw(screen)
-            show_score(screen, snake.score, snake.revealed_puzzles, current_level_index, game_won)
+            show_score(screen, snake.score, snake.revealed_puzzles, level_index, game_won)
             pygame.display.update()
             
-            clock.tick(FPS)
+            clock.tick(SNAKE_SPEED)  # Используем настройку скорости
+        
         elif game_won:
-            # Показываем экран завершения уровня
-            next_level_available = (current_level_index + 1 < len(LEVELS) and 
-                                  LEVELS[current_level_index + 1]["unlocked"])
-            action = show_level_completed(screen, snake.score, current_level_index, next_level_available)
+            # Показ экрана завершения уровня
+            next_level_available = (level_index + 1 < len(LEVELS) and 
+                                  LEVELS[level_index + 1]["unlocked"])
+            action = show_level_completed(screen, snake.score, level_index, next_level_available)
             
             if action == "next_level":
                 # Переходим на следующий уровень
-                current_level_index += 1
-                background = load_background_for_level(current_level_index)
-                snake = Snake(sounds, current_level_index)
+                level_index += 1
+                background = load_background_for_level(level_index)
+                snake = Snake(sounds, level_index)
                 food = Food()
                 game_over = False
                 game_won = False
                 game_over_sound_played = False
                 win_sound_played = False
-                play_background_music()
+                # Перезапускаем музыку
+                pygame.mixer.music.play(-1)
+                pygame.mixer.music.set_volume(MUSIC_VOLUME)
             elif action == "menu":
                 # Возвращаемся к выбору уровня
-                current_level_index = show_level_selection(screen, sounds)
-                if current_level_index is None:
-                    pygame.quit()
-                    return
-                background = load_background_for_level(current_level_index)
-                snake = Snake(sounds, current_level_index)
-                food = Food()
-                game_over = False
-                game_won = False
-                game_over_sound_played = False
-                win_sound_played = False
-                play_background_music()
+                return "menu"
             elif action == "restart":
                 # Перезапускаем текущий уровень
-                snake = Snake(sounds, current_level_index)
+                snake = Snake(sounds, level_index)
                 food = Food()
                 game_over = False
                 game_won = False
                 game_over_sound_played = False
                 win_sound_played = False
-                play_background_music()
+                # Перезапускаем музыку
+                pygame.mixer.music.play(-1)
+                pygame.mixer.music.set_volume(MUSIC_VOLUME)
             elif action is None:
                 pygame.quit()
-                return
+                return "quit"
+                
         else:
             pygame.mixer.music.stop()
             
@@ -990,36 +1511,86 @@ def main():
             
             # Обработка нажатий на экране game over
             show_game_over(screen, snake.score, snake.revealed_puzzles, background, 
-                         puzzle_cover, snake.available_puzzles, current_level_index)
+                         puzzle_cover, snake.available_puzzles, level_index)
             
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
-                    return
+                    return "quit"
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
                         # Перезапуск уровня
-                        snake = Snake(sounds, current_level_index)
+                        snake = Snake(sounds, level_index)
                         food = Food()
                         game_over = False
                         game_won = False
                         game_over_sound_played = False
                         win_sound_played = False
-                        play_background_music()
+                        pygame.mixer.music.play(-1)
+                        pygame.mixer.music.set_volume(MUSIC_VOLUME)
                     elif event.key == pygame.K_ESCAPE:
                         # Возврат к выбору уровня
-                        current_level_index = show_level_selection(screen, sounds)
-                        if current_level_index is None:
-                            pygame.quit()
-                            return
-                        background = load_background_for_level(current_level_index)
-                        snake = Snake(sounds, current_level_index)
-                        food = Food()
-                        game_over = False
-                        game_won = False
-                        game_over_sound_played = False
-                        win_sound_played = False
-                        play_background_music()
+                        return "menu"
+
+def main():
+    """Главная функция игры"""
+    # Загружаем прогресс
+    load_progress()
+    
+    # Текущее состояние приложения
+    current_state = "main_menu"
+    level_to_play = None
+    
+    while True:
+        if current_state == "main_menu":
+            action = show_main_menu()
+            if action == "quit":
+                break
+            elif action == "play":
+                current_state = "level_selection"
+            elif action == "settings":
+                current_state = "settings_menu"
+            elif action == "gallery":
+                current_state = "gallery_menu"
+                
+        elif current_state == "level_selection":
+            result = show_level_selection()
+            if result == "quit":
+                break
+            elif result == "menu":
+                current_state = "main_menu"
+            elif isinstance(result, int):
+                level_to_play = result
+                current_state = "game"
+                
+        elif current_state == "settings_menu":
+            result = show_settings()
+            if result == "quit":
+                break
+            elif result == "menu":
+                current_state = "main_menu"
+                
+        elif current_state == "gallery_menu":
+            result = show_gallery()
+            if result == "quit":
+                break
+            elif result == "menu":
+                current_state = "main_menu"
+                
+        elif current_state == "game":
+            if level_to_play is not None:
+                result = play_game(level_to_play)
+                if result == "quit":
+                    break
+                elif result == "menu":
+                    current_state = "main_menu"
+                    level_to_play = None
+            else:
+                current_state = "main_menu"
+    
+    # Сохраняем прогресс перед выходом
+    save_progress()
+    pygame.quit()
 
 if __name__ == "__main__":
     main()
