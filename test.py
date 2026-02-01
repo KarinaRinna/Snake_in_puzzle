@@ -340,6 +340,8 @@ def show_main_menu():
 
 def show_settings(): 
     """Показ меню настроек"""
+    
+    global SNAKE_SPEED, MUSIC_VOLUME, SOUND_VOLUME, SNAKE_COLOR
     # Создаем слайдеры
     speed_slider = Slider(WIDTH//2 - 150, 100, 300, 20, 5, 20, SNAKE_SPEED, "Скорость змейки")
     music_slider = Slider(WIDTH//2 - 150, 160, 300, 20, 0, 100, int(MUSIC_VOLUME * 100), "Громкость музыки")
@@ -1594,3 +1596,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
